@@ -1,0 +1,40 @@
+{
+  "name": "porta",
+  "version": "0.0.0",
+  "description": "A pre-fetching, isomorphic JavaScript transport layer",
+  "dependencies": {},
+  "devDependencies": {
+    "exam": "^1.0.0",
+    "jymin": "^1.0.0"
+  },
+  "keywords": [
+    "portable",
+    "js",
+    "javascript",
+    "isomorphic",
+    "ajaj",
+    "ajax",
+    "transport",
+    "xhr",
+    "porta"
+  ],
+  "main": "porta.js",
+  "engines": {
+    "node": ">=0.2.6"
+  },
+  "scripts": {
+    "build": "./node_modules/jymin/jymin-build.js",
+    "test": "./node_modules/exam/exam.js",
+    "cover": "istanbul cover ./node_modules/exam/exam.js",
+    "report": "open coverage/lcov-report/index.html",
+    "coveralls": "istanbul cover ./node_modules/exam/exam.js --report lcovonly -- -R spec && cat ./coverage/lcov.info | coveralls && rm -rf ./coverage"
+  },
+  "repository": "https://github.com/lighterio/porta.git",
+  "bugs": "https://github.com/lighterio/porta/issues",
+  "homepage": "http://lighter.io/porta",
+  "author": "Sam Eubank <sameubank@gmail.com>",
+  "contributors": [
+    "Sam Eubank <sameubank@gmail.com>"
+  ],
+  "license": "MIT"
+}
