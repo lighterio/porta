@@ -4,7 +4,7 @@
 var porta = module.exports = function (app) {
   var chug = app.chug
 
-  chug.onceReady(function () {
+  chug.then(function () {
     var views = app.views
 
     // Iterate over the views building an array of key-value pair strings.

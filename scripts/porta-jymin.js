@@ -8,7 +8,12 @@
  */
 
 /**
- * Porta is a function that accepts new views.
+ * If a mobile build hasn't set the platform, assume "web".
+ */
+window._platform = window._platform || 'web'
+
+/**
+ * The Porta function accepts views and the initial state.
  */
 window.Porta = function (viewsOrState) {
 
@@ -20,122 +25,142 @@ window.Porta = function (viewsOrState) {
     map[name] = value
   })
 
-  // If we just populated views, signal that Porta is ready.
-  if (isViews) {
-    Jymin.trigger('porta')
-    Porta.isReady = 1
-  }
-
-  // If we can push history and we've been given views.
-  if (history.pushState && !Porta.isReady) {
-
-    // When a same-domain link is clicked, fetch it via XMLHttpRequest.
-    Jymin.on('a', 'click,touchend', function (a, event) {
-      var href = Jymin.getAttribute(a, 'href')
-      var url = Porta.getHref(a)
-      var buttonNumber = event.which
-      var isLeftClick = (!buttonNumber || (buttonNumber === 1))
-      if (isLeftClick) {
-        if (Jymin.startsWith(href, '#')) {
-          var name = href.substr(1)
-          Jymin.scrollToAnchor(name)
-          Jymin.historyReplace(url + href)
-          Jymin.preventDefault(event)
-          Jymin.stopPropagation(event)
-        } else if (url && Porta.isSameDomain(url)) {
-          Jymin.preventDefault(event)
-          Porta.load(url, 0, a)
-        }
-      }
-    })
-
-    // When a same-domain link is hovered, prefetch it.
-    // TODO: Use mouse movement to detect probably targets.
-    Jymin.on('a', 'mouseover,touchstart', function (a) {
-      if (!Jymin.hasClass(a, '_noPrefetch')) {
-        var url = Porta.getHref(a)
-        var isDifferentPage = (url !== Porta.removeHash(location))
-        if (isDifferentPage && Porta.isSameDomain(url)) {
-          Porta.prefetch(url)
-        }
-      }
-    })
-
-    // When an input changes, update the state.
-    Jymin.on('input,select,textarea,button', 'keyup,mouseup,touchend,change', function (element) {
-      Porta.set(element.name, Jymin.getValue(element))
-    })
-
-    // When a form button is clicked, update the state.
-    Jymin.on('input,button', 'click,touchend', function (button) {
-      if (button.type === 'submit') {
-        Porta.set(button.name, Jymin.getValue(button))
-      }
-    })
-
-    // When a form is submitted, gather its data and submit via XMLHttpRequest.
-    Jymin.on('form', 'submit', function (form, event) {
-      var url = Porta.removeHash(form.action || Porta.removeQuery(location))
-      var enc = Jymin.getAttribute(form, 'enctype')
-      var isGet = (Jymin.lower(form.method) === 'get')
-      if (Porta.isSameDomain(url) && !/multipart/.test(enc)) {
-        Jymin.preventDefault(event)
-
-        var isValid = form._validate ? form._validate() : true
-        if (!isValid) {
-          return
-        }
-
-        // Get form data.
-        var data = []
-        Jymin.all(form, 'input,select,textarea,button', function (input) {
-          var name = input.name
-          var type = input.type
-          var value = Jymin.getValue(input)
-          var ignore = !name
-          ignore = ignore || ((type === 'radio') && !value)
-          ignore = ignore || ((type === 'submit') && (input !== form._clickedButton))
-          if (!ignore) {
-            function pushFormValue (value) {
-              Jymin.push(data, Jymin.escape(name) + '=' + Jymin.escape(value))
-            }
-            if (Jymin.isString(value)) {
-              pushFormValue(value)
-            } else {
-              Jymin.forEach(value, pushFormValue)
-            }
-          }
-        })
-        url = Porta.appendData(url, 'v=' + Jymin.getTime())
-
-        // For a get request, append data to the URL.
-        if (isGet) {
-          url = Porta.appendData(data.join('&'))
-          data = 0
-
-        // If posting, append a timestamp so we can repost with this base URL.
-        } else {
-          url = Porta.appendExtension(url)
-          data = data.join('&')
-        }
-
-        // Submit form data to the URL.
-        Porta.load(url, data, form)
-      }
-    })
-
-    // When a user presses the back button, render the new URL.
-    Jymin.onHistoryPop(function () {
-      if (location !== Porta.destination) {
-        Porta.load(location)
-      }
-    })
-
+  // If we just populated views, set Porta up to listen for events.
+  if (isViews && history.pushState) {
+    Porta.listen()
   }
 
 }
 
-Porta.isReady = 0
+/**
+ * Listen for events on links and forms.
+ */
+Porta.listen = function () {
+  if (Porta.isListening) {
+    return
+  }
+
+  // Signal that Porta is listening
+  Jymin.trigger('Porta:listening')
+  Porta.isListening = 1
+
+  // When a same-domain link is clicked, fetch it via XMLHttpRequest.
+  Jymin.on('a', 'click,touchend', function (a, event) {
+    var href = Jymin.getAttribute(a, 'href')
+    var url = Porta.getHref(a)
+    var buttonNumber = event.which
+    var isLeftClick = (!buttonNumber || (buttonNumber === 1))
+    //+debug
+    console.log('[Porta] Link ' + event.type + ' ' + href + ' -> ' + url)
+    //-debug
+    if (isLeftClick) {
+      if (Jymin.startsWith(href, '#')) {
+        //+debug
+        console.log('[Porta] Scrolling to anchor: ' + href + '.')
+        //-debug
+        var name = href.substr(1)
+        Jymin.scrollToAnchor(name)
+        Jymin.historyReplace(url + href)
+        Jymin.preventDefault(event)
+        Jymin.stopPropagation(event)
+      } else if (url && Porta.isSameDomain(url)) {
+        //+debug
+        console.log('[Porta] Loading URL: ' + url + '.')
+        //-debug
+        Jymin.preventDefault(event)
+        Porta.load(url, 0, a)
+      }
+    } else if (!url) {
+      Jymin.preventDefault(event)
+    }
+  })
+
+  // When a same-domain link is hovered, prefetch it.
+  // TODO: Use mouse movement to detect probable targets.
+  Jymin.on('a', 'mouseover,touchstart', function (a) {
+    if (!Jymin.hasClass(a, '_noPrefetch')) {
+      var url = Porta.getHref(a)
+      var isDifferentPage = (url !== Porta.removeHash(location))
+      if (isDifferentPage && Porta.isSameDomain(url)) {
+        Porta.prefetch(url)
+      }
+    }
+  })
+
+  // When an input changes, update the state.
+  Jymin.on('input,select,textarea,button', 'keyup,mouseup,touchend,change', function (element) {
+    Porta.set(element.name, Jymin.getValue(element))
+  })
+
+  // When a form button is clicked, update the state.
+  Jymin.on('input,button', 'click,touchend', function (button) {
+    if (button.type === 'submit') {
+      Porta.set(button.name, Jymin.getValue(button))
+    }
+  })
+
+  // When a form is submitted, gather its data and submit via XMLHttpRequest.
+  Jymin.on('form', 'submit', function (form, event) {
+    var url = Porta.removeHash(form.action || Porta.removeQuery(location))
+    var enc = Jymin.getAttribute(form, 'enctype')
+    var isGet = (Jymin.lower(form.method) === 'get')
+    if (Porta.isSameDomain(url) && !/multipart/.test(enc)) {
+      Jymin.preventDefault(event)
+
+      var isValid = form._validate ? form._validate() : true
+      if (!isValid) {
+        return
+      }
+
+      // Get form data.
+      var data = []
+      Jymin.all(form, 'input,select,textarea,button', function (input) {
+        var name = input.name
+        var type = input.type
+        var value = Jymin.getValue(input)
+        var ignore = !name
+        ignore = ignore || ((type === 'radio') && !value)
+        ignore = ignore || ((type === 'submit') && (input !== form._clickedButton))
+        if (!ignore) {
+          function pushFormValue (value) {
+            Jymin.push(data, Jymin.escape(name) + '=' + Jymin.escape(value))
+          }
+          if (Jymin.isString(value)) {
+            pushFormValue(value)
+          } else {
+            Jymin.forEach(value, pushFormValue)
+          }
+        }
+      })
+      url = Porta.appendData(url, 'v=' + Jymin.getTime())
+
+      // For a get request, append data to the URL.
+      if (isGet) {
+        url = Porta.appendData(data.join('&'))
+        data = 0
+
+      // If posting, append a timestamp so we can repost with this base URL.
+      } else {
+        url = Porta.appendExtension(url)
+        data = data.join('&')
+      }
+
+      // Submit form data to the URL.
+      Porta.load(url, data, form)
+    }
+  })
+
+  // When a user presses the back button, render the new URL.
+  Jymin.onHistoryPop(function () {
+    if (location !== Porta.destination) {
+      console.log('[Porta] ' + location + ' !== ' + Porta.destination)
+      Porta.load(location)
+    }
+  })
+
+}
+
+Porta.isListening = 0
 
 Porta.views = {
   '$': function(v){return (!v&&v!==0?'':(typeof v=='object'?Jymin.stringify(v)||'':''+v)).replace(/</g,'&lt;');},
@@ -156,7 +181,7 @@ Porta.base = (window._href || location.protocol + '//' + location.host) + '/'
 
 Porta.destination = 0
 
-Porta.platform = 'web'
+Porta.localStorageTtl = 1e9
 
 Porta.isSameDomain = function (url) {
   return Jymin.startsWith(url, Porta.base)
@@ -183,7 +208,7 @@ Porta.removeExtension = function (url) {
 }
 
 Porta.getLocalTtl = function (data) {
-  return data.localTtl || window._localTtl || -1
+  return data.localStorageTtl || Porta.localStorageTtl || -1
 }
 
 Porta.getHref = function (a) {
@@ -196,13 +221,13 @@ Porta.prefetch = function (url) {
   // Only proceed if it's not already prefetched.
   if (!Porta.cache[url]) {
     //+env:debug
-    Jymin.log('[Porta] Prefetching "' + url + '".')
+    console.log('[Porta] Prefetching "' + url + '".')
     //-env:debug
 
     // Create a callback queue to execute when data arrives.
     Porta.cache[url] = [function (response) {
       //+env:debug
-      Jymin.log('[Porta] Caching contents for prefetched URL "' + url + '".')
+      console.log('[Porta] Caching contents for prefetched URL "' + url + '".')
       //-env:debug
 
       // Cache the response so data can be used without a queue.
@@ -214,7 +239,7 @@ Porta.prefetch = function (url) {
         // Only delete if it's not a new callback queue.
         if (!Jymin.isArray(Porta.cache[url])) {
           //+env:debug
-          Jymin.log('[Porta] Removing "' + url + '" from prefetch cache.')
+          console.log('[Porta] Removing "' + url + '" from prefetch cache.')
           //-env:debug
           delete Porta.cache[url]
         }
@@ -232,6 +257,11 @@ Porta.load = function (url, data, sourceElement) {
   var viewName
   Porta.destination = Porta.removeExtension(url)
 
+  // Stop the Mimo base URL from loading.
+  if (/\/m\.html/.test(url)) {
+    return
+  }
+
   // If the URL is being loaded for a link or form, paint the target.
   if (sourceElement) {
     target = Jymin.getData(sourceElement, '_portaTarget')
@@ -244,7 +274,7 @@ Porta.load = function (url, data, sourceElement) {
   }
 
   //+env:debug
-  Jymin.log('[Porta] Loading "' + url + '".')
+  console.log('[Porta] Loading "' + url + '".')
   //-env:debug
 
   // Set all spinners in the page to their loading state.
@@ -262,7 +292,7 @@ Porta.load = function (url, data, sourceElement) {
   // If there's no resource, start the JSON request.
   if (!resource) {
     //+env:debug
-    Jymin.log('[Porta] Creating callback queue for "' + url + '".')
+    console.log('[Porta] Creating callback queue for "' + url + '".')
     //-env:debug
     Porta.cache[url] = [handler]
     Porta.getJson(url, data)
@@ -270,14 +300,14 @@ Porta.load = function (url, data, sourceElement) {
   // If the "resource" is a callback queue, then pushing means listening.
   } else if (Jymin.isArray(resource)) {
     //+env:debug
-    Jymin.log('[Porta] Queueing callback for "' + url + '".')
+    console.log('[Porta] Queueing callback for "' + url + '".')
     //-env:debug
     Jymin.push(resource, handler)
 
   // If the resource exists and isn't an array, render it.
   } else {
     //+env:debug
-    Jymin.log('[Porta] Found prePorta.cached response for "' + url + '".')
+    console.log('[Porta] Found prePorta.cached response for "' + url + '".')
     //-env:debug
     handler(resource, url)
   }
@@ -288,7 +318,7 @@ Porta.load = function (url, data, sourceElement) {
  */
 Porta.getJson = function (url, data) {
   //+env:debug
-  Jymin.log('[Porta] Fetching response for "' + url + '".')
+  console.log('[Porta] Fetching response for "' + url + '".')
   //-env:debug
 
   // Indicate with a URL param that Porta is requesting data, so we'll get JSON.
@@ -299,15 +329,15 @@ Porta.getJson = function (url, data) {
     var queue = Porta.cache[url]
     Porta.cache[url] = data
     //+env:debug
-    Jymin.log('[Porta] Running ' + queue.length + ' callback(s) for "' + url + '".')
+    console.log('[Porta] Running ' + queue.length + ' callback(s) for "' + url + '".')
     //-env:debug
     Jymin.forEach(queue, function (callback) {
       callback(data, url)
     })
 
     // If the response can live in local storage, store it.
-    var localTtl = Porta.getLocalTtl(data)
-    if (localTtl > -1 && !data.cacheTime) {
+    var localStorageTtl = Porta.getLocalTtl(data)
+    if (localStorageTtl > -1 && !data.cacheTime) {
       data.cacheTime = Jymin.getTime()
       Jymin.store(url, data)
     }
@@ -322,10 +352,10 @@ Porta.getJson = function (url, data) {
     // Also try to get cached data from local storage.
     var data = Jymin.fetch(url)
     if (data) {
-      var localTtl = Porta.getLocalTtl(data)
+      var localStorageTtl = Porta.getLocalTtl(data)
       Porta.cacheTime = data.cacheTime
-      var isEternal = (localTtl === 0)
-      var isFresh = (Porta.cacheTime + localTtl >= Jymin.getTime())
+      var isEternal = (localStorageTtl === 0)
+      var isFresh = (Porta.cacheTime + localStorageTtl >= Jymin.getTime())
       if (isEternal || isFresh) {
         var tempUrl = Porta.destination
         onComplete(data)
@@ -394,7 +424,7 @@ Porta.renderResponse = function (viewName, state, target, requestUrl) {
     if (Jymin.trim(state)[0] === '<') {
       html = state
       //+env:debug
-      Jymin.log('[Porta] Rendering HTML string')
+      console.log('[Porta] Rendering HTML string')
       //-env:debug
 
     // If the state refers to a view that we have, render it.
@@ -403,7 +433,7 @@ Porta.renderResponse = function (viewName, state, target, requestUrl) {
       html = view.call(Porta.views, state)
       Jymin.endTime('ltl')
       //+env:debug
-      Jymin.log('[Porta] Rendering view "' + viewName + '".')
+      console.log('[Porta] Rendering view "' + viewName + '".')
       //-env:debug
 
     // If we can't find a corresponding view, navigate the old-fashioned way.
@@ -431,11 +461,9 @@ Porta.renderResponse = function (viewName, state, target, requestUrl) {
     }
 
     // Change the location bar to reflect where we are now.
-    if (Porta.platform === 'web') {
-      var isSamePage = Porta.removeQuery(responseUrl) === Porta.removeQuery(location.href)
-      var historyMethod = isSamePage ? Jymin.historyReplace : Jymin.historyPush
-      historyMethod(responseUrl)
-    }
+    var isSamePage = Porta.removeQuery(responseUrl) === Porta.removeQuery(location.href)
+    var historyMethod = isSamePage ? Jymin.historyReplace : Jymin.historyPush
+    historyMethod(responseUrl)
 
     // If we render this page again, we'll want fresh data.
     delete Porta.cache[requestUrl]
@@ -512,5 +540,7 @@ Porta.render = function (viewName, state) {
 /**
  * Insert a script to load views.
  */
-Jymin.insertScript((window._href || '') + '/p.js?v=CACHE_BUST')
+if (window._platform == 'web') {
+  Jymin.insertScript((window._href || '') + '/p.js?v=CACHE_BUST')
+}
 
