@@ -19,7 +19,7 @@ window.Porta = function (viewsOrState) {
 
   // Add new views or state values.
   var isViews = false
-  Jymin.forIn(viewsOrState, function (name, value) {
+  Jymin.each(viewsOrState, function (value, name) {
     isViews = Jymin.isFunction(value)
     var map = isViews ? Porta.views : Porta.state
     map[name] = value
@@ -41,7 +41,7 @@ Porta.listen = function () {
   }
 
   // Signal that Porta is listening
-  Jymin.trigger('Porta:listening')
+  Jymin.isReady(Porta, 1)
   Porta.isListening = 1
 
   // When a same-domain link is clicked, fetch it via XMLHttpRequest.
@@ -61,8 +61,7 @@ Porta.listen = function () {
         var name = href.substr(1)
         Jymin.scrollToAnchor(name)
         Jymin.historyReplace(url + href)
-        Jymin.preventDefault(event)
-        Jymin.stopPropagation(event)
+        Jymin.stopEvent(event)
       } else if (url && Porta.isSameDomain(url)) {
         //+debug
         console.log('[Porta] Loading URL: ' + url + '.')
@@ -89,13 +88,13 @@ Porta.listen = function () {
 
   // When an input changes, update the state.
   Jymin.on('input,select,textarea,button', 'keyup,mouseup,touchend,change', function (element) {
-    Porta.set(element.name, Jymin.getValue(element))
+    Porta.set(element.name, Jymin.value(element))
   })
 
   // When a form button is clicked, update the state.
   Jymin.on('input,button', 'click,touchend', function (button) {
     if (button.type === 'submit') {
-      Porta.set(button.name, Jymin.getValue(button))
+      Porta.set(button.name, Jymin.value(button))
     }
   })
 
@@ -117,18 +116,18 @@ Porta.listen = function () {
       Jymin.all(form, 'input,select,textarea,button', function (input) {
         var name = input.name
         var type = input.type
-        var value = Jymin.getValue(input)
+        var value = Jymin.value(input)
         var ignore = !name
         ignore = ignore || ((type === 'radio') && !value)
         ignore = ignore || ((type === 'submit') && (input !== form._clickedButton))
         if (!ignore) {
           function pushFormValue (value) {
-            Jymin.push(data, Jymin.escape(name) + '=' + Jymin.escape(value))
+            data.push(Jymin.escape(name) + '=' + Jymin.escape(value))
           }
           if (Jymin.isString(value)) {
             pushFormValue(value)
           } else {
-            Jymin.forEach(value, pushFormValue)
+            Jymin.each(value, pushFormValue)
           }
         }
       })
@@ -171,7 +170,7 @@ Porta.url = ''
 
 Porta.viewName = ''
 
-Porta.view = Jymin.doNothing
+Porta.view = Jymin.no
 
 Porta.state = {}
 
@@ -302,7 +301,7 @@ Porta.load = function (url, data, sourceElement) {
     //+env:debug
     console.log('[Porta] Queueing callback for "' + url + '".')
     //-env:debug
-    Jymin.push(resource, handler)
+    resource.push(handler)
 
   // If the resource exists and isn't an array, render it.
   } else {
@@ -331,7 +330,7 @@ Porta.getJson = function (url, data) {
     //+env:debug
     console.log('[Porta] Running ' + queue.length + ' callback(s) for "' + url + '".')
     //-env:debug
-    Jymin.forEach(queue, function (callback) {
+    Jymin.each(queue, function (callback) {
       callback(data, url)
     })
 
@@ -347,7 +346,7 @@ Porta.getJson = function (url, data) {
   if (!/\/Containers\/Bundle\//.test(jsonUrl)) {
 
     // Fire the JSON request.
-    Jymin.getResponse(jsonUrl, data, onComplete, onComplete)
+    Jymin.get(jsonUrl, data, onComplete, onComplete)
 
     // Also try to get cached data from local storage.
     var data = Jymin.fetch(url)
@@ -451,7 +450,7 @@ Porta.renderResponse = function (viewName, state, target, requestUrl) {
   if (html) {
 
     Jymin.startTime('push')
-    Jymin.pushHtml(html, target)
+    var targetElement = Jymin.pushHtml(html, target)
     Jymin.endTime('push')
 
     // If there's a title in the state, write it to the document.
@@ -472,7 +471,7 @@ Porta.renderResponse = function (viewName, state, target, requestUrl) {
     delete Porta.state._target
 
     // Trigger an event to allow code to execute when stuff renders.
-    Jymin.trigger('render')
+    Jymin.emit('render', targetElement)
   }
 }
 
@@ -541,6 +540,5 @@ Porta.render = function (viewName, state) {
  * Insert a script to load views.
  */
 if (window._platform == 'web') {
-  Jymin.insertScript((window._href || '') + '/p.js?v=CACHE_BUST')
+  Jymin.js((window._href || '') + '/p.js?v=CACHE_BUST')
 }
-

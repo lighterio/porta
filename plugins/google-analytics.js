@@ -12,11 +12,11 @@ ga.q = [
   ['create', 'GOOGLE_ANALYTICS_ID', 'GOOGLE_ANALYTICS_SITE'],
   ['send', 'pageview']
 ]
-Jymin.insertScript('//www.google-analytics.com/analytics.js')
+Jymin.js('//www.google-analytics.com/analytics.js')
 
 /**
  * When a new page is rendered, record a pageview.
  */
-Jymin.bind(Porta, 'render', function () {
+Jymin.on('render', function () {
   ga('send', 'pageview')
 })
